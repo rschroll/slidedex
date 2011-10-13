@@ -1,124 +1,14 @@
 import os
 import sys
-import subprocess
-import tempfile
-import glob
 import gtk
 import glib
-import poppler
-import cairo
 import pango
 import gtksourceview2 as sourceview
-import vte
+from misc import SEP, do_latex, LIBPATH
+from pdfviewer import PDFViewer
+from latexslide import LatexSlide
+from commandexecutor import executor
 
-SEP = "\n%%SLIDEEDIT%%\n"
-LATEXLANG = sourceview.language_manager_get_default().get_language('latex')
-SCRIPTPATH = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
-
-def do_latex(obj, callback=None, stop_on_error=True):
-    if obj.filename.endswith('.tex'):
-        fn = obj.filename[:-4]
-    else:
-        fn = obj.filename
-    
-    def after_latex(status):
-        if status == 0:
-            obj.doc = poppler.document_new_from_file('file://' + os.path.abspath(fn+'.pdf'), None)
-        if callback:
-            callback(status)
-    
-    executor.add((("latex", "-halt-on-error", fn), ("dvips", fn), ("ps2pdf", fn+'.ps')),stop_on_error, (after_latex,))
-
-class CommandExecutor(object):
-    def __init__(self):
-        self.is_running = False
-        self.command_queue = []
-        
-        self.window = gtk.Window()
-        vbox = gtk.VBox()
-        self.window.add(vbox)
-        hbox = gtk.HBox()
-        vbox.pack_start(hbox)
-        self.term = vte.Terminal()
-        hbox.pack_start(self.term)
-        hbox.pack_start(gtk.VScrollbar(self.term.get_adjustment()), False)
-        self.term.set_scrollback_lines(1000)
-        
-        hbox = gtk.HBox()
-        vbox.pack_start(hbox, expand=False, padding=6)
-        self.label = gtk.Label('Hi')
-        self.button = gtk.Button('Close')
-        self.button.connect('clicked', self.on_close)
-        hbox.pack_start(self.label, True, False)
-        hbox.pack_end(self.button, False)
-        vbox.show_all()
-        self.window.connect('delete-event', self.on_close)
-        self.term.connect('child-exited', self.callback)
-        self.window.set_transient_for(doc.window)
-        self.window.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
-        self.window.set_resizable(False)
-    
-    def add(self, commands, stop_on_error=True, callback=None):
-        self.command_queue.append([commands, stop_on_error, callback])
-        if not self.is_running:
-            self.is_running = True
-            self.window.show()
-            self.label.set_text('Running')
-            self.window.set_title('Running')
-            self.button.set_sensitive(False)
-            self.term.reset(True, True)
-            self.run()
-    
-    def run(self):
-        try:
-            commands, stop_on_error, callback = self.command_queue[0]
-        except IndexError:
-            self.is_running = False
-            self.window.hide()
-            return
-        try:
-            command = commands[0]
-            self.command_queue[0][0] = commands[1:]
-        except IndexError:
-            self.command_queue.pop(0)
-            self.run()
-        else:
-            pid = self.term.fork_command(command[0], command)
-    
-    def callback(self, term):
-        status = term.get_child_exit_status()
-        commands, stop_on_error, callback = self.command_queue[0]
-        
-        if status != 0 or not commands:
-            self.command_queue.pop(0)
-            if callback:
-                callback[0](status, *callback[1:])
-        if status == 0 or not stop_on_error:
-            self.run()
-        else:
-            self.error()
-    
-    def error(self):
-        self.command_queue = []
-        self.is_running = False
-        self.label.set_text('Errors')
-        self.window.set_title('Errors')
-        self.button.set_sensitive(True)
-        self.button.grab_focus()
-    
-    def on_close(self, widget, event=None):
-        self.window.hide()
-        return True
-
-
-def render_to_pixbuf(page, msize):
-    psize = page.get_size() # floats
-    scale = min([s/ps for s, ps in zip(msize, psize)])
-    size = [int(ps*scale) for ps in psize]
-    pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, *size)
-    page.render_to_pixbuf(0,0,size[0],size[1],scale,0,pb)
-    return pb
-    
 
 class EventDispatcher(object):
     def __init__(self, parent):
@@ -131,88 +21,11 @@ class EventDispatcher(object):
         else:
             return getattr(self.parent, name)
         
-class PDFViewer(object):
-    def __init__(self, builder):
-        self.prev_button = builder.get_object("prev_button")
-        self.next_button = builder.get_object("next_button")
-        image = gtk.Image()
-        image.set_from_stock(gtk.STOCK_GO_BACK, gtk.ICON_SIZE_BUTTON)
-        self.prev_button.set_image(image)
-        image = gtk.Image()
-        image.set_from_stock(gtk.STOCK_GO_FORWARD, gtk.ICON_SIZE_BUTTON)
-        self.next_button.set_image(image)
-        self.npage_label = builder.get_object("npage_label")
-        self.page_entry = builder.get_object("page_entry")
-        self.view_image = builder.get_object("view_image")
-        self.doc = None
-        self.npages = -1
-        self.currpage = -1
-    
-    def _load(self):
-        if self.doc is not None:
-            self.npages = self.doc.get_n_pages()
-            self.npage_label.set_text(" of %i"%self.npages)
-            self.currpage = 0
-            self.page_entry.set_sensitive(True)
-        else:
-            self.npages = 0
-            self.npage_label.set_text("")
-            self.page_entry.set_sensitive(False)
-        self.set_page_controls()
-    
-    def load_file(self, filename):
-        self.doc = poppler.document_new_from_file('file://' + os.path.abspath(filename), None)
-        self._load()
-    
-    def load_doc(self, doc):
-        self.doc = doc
-        self._load()
-        
-    def on_prev(self, widget):
-        self.currpage -= 1
-        if self.currpage < 1:
-            self.currpage = 0
-        self.set_page_controls()
-    
-    def on_next(self, widget):
-        self.currpage += 1
-        self.set_page_controls()
-    
-    def on_setpage(self, widget):
-        try:
-            self.currpage = int(widget.get_text())-1
-        except ValueError:
-            pass
-        self.set_page_controls()
-    
-    def set_page_controls(self):
-        if self.currpage <= 0:
-            self.currpage = 0
-            self.prev_button.set_sensitive(False)
-        else:
-            self.prev_button.set_sensitive(True)
-        if self.currpage >= self.npages-1:
-            self.currpage = self.npages - 1
-            self.next_button.set_sensitive(False)
-            if self.currpage == 0:
-                self.prev_button.set_sensitive(False)
-        else:
-            self.next_button.set_sensitive(True)
-        self.page_entry.set_text(str(self.currpage+1))
-        self.render()
-    
-    def render(self):
-        if self.doc is not None:
-            rect = self.view_image.get_allocation()
-            pb = render_to_pixbuf(self.doc.get_page(self.currpage), (rect.width, rect.height))
-            self.view_image.set_from_pixbuf(pb)
-        else:
-            self.view_image.set_from_icon_name(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
 
 class LatexDocument(object):
     def __init__(self, filename=None):
         builder = gtk.Builder()
-        builder.add_from_file(os.path.join(SCRIPTPATH, "mainwindow.glade"))
+        builder.add_from_file(os.path.join(LIBPATH, "mainwindow.glade"))
         self.get_objects(builder)
         vbox = builder.get_object("vbox1")
         hbox = builder.get_object("hbox1")
@@ -252,6 +65,10 @@ class LatexDocument(object):
         self.doc = None
         if filename is not None:
             glib.idle_add(self.load, filename)
+        
+        # This is really ugly.  I need to decide if executor should belong
+        # to LatexDocument or be a singleton.
+        executor.window.set_transient_for(self.window)
     
     def load(self, filename):
         dir = os.path.dirname(os.path.abspath(filename))
@@ -511,68 +328,3 @@ class LatexDocument(object):
     
     def blah(self, action):
         print "Blah!"
-
-class LatexSlide(object):
-    
-    def __init__(self, parent, content="", render=True):
-        self.parent = parent
-        self.buffer = sourceview.Buffer(language=LATEXLANG)
-        self.set_content(content)
-        self.buffer.connect("modified-changed", self.parent.on_modified_changed)
-        # This is deprecated as a security risk, since the file could be
-        # created before you make it.  But we're not actually using this
-        # file; we're using the filename as a base, so the additional
-        # features of mkstemp don't help us avoid this problem.
-        filename = tempfile.mktemp(dir='./')
-        self.filename = os.path.basename(filename)
-        self.doc = None
-        self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
-        if render:
-            self.compile(lambda status: not status and self.render_thumb(), False)
-    
-    def set_content(self, content=""):
-        self.buffer.begin_not_undoable_action()
-        self.buffer.set_text(content)
-        self.buffer.end_not_undoable_action()
-        self.buffer.set_modified(False)
-        self.buffer.place_cursor(self.buffer.get_start_iter())
-    
-    def get_content(self):
-        return self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter())
-    
-    def set_modified(self, mod):
-        self.buffer.set_modified(mod)
-    
-    def get_modified(self):
-        return self.buffer.get_modified()
-    
-    def compile(self, callback=None, stop_on_error=True):
-        f = file(self.filename + '.tex', 'w')
-        f.write(self.parent.header.get_content() + SEP + self.get_content() + 
-                SEP + self.parent.footer.get_content())
-        f.close()
-        do_latex(self, callback, stop_on_error)
-    
-    def render_thumb(self):
-        if self.doc is not None:
-            self.pb = render_to_pixbuf(self.doc.get_page(0), (300,100))
-        else:
-            self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
-        for i in range(len(self.parent.pages)):
-            if self.parent.pages[i][0] == self:
-                self.parent.pages[i][1] = self.pb
-    
-    def del_files(self):
-        for f in glob.glob(self.filename + '*'):
-            os.unlink(f)
-
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        filename = sys.argv[1]
-    else:
-        filename = None
-    doc = LatexDocument(filename)
-    executor = CommandExecutor()
-    doc.window.show()
-    gtk.main()
