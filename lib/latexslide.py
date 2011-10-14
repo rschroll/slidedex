@@ -3,7 +3,7 @@ import tempfile
 import glob
 import gtk
 import gtksourceview2 as sourceview
-from misc import SEP, do_latex, render_to_pixbuf
+from misc import SEP, render_to_pixbuf
 
 LATEXLANG = sourceview.language_manager_get_default().get_language('latex')
 
@@ -46,7 +46,10 @@ class LatexSlide(object):
         f.write(self.parent.header.get_content() + SEP + self.get_content() + 
                 SEP + self.parent.footer.get_content())
         f.close()
-        do_latex(self, callback, stop_on_error)
+        self.do_latex(callback, stop_on_error)
+    
+    def do_latex(self, callback, stop_on_error):
+        self.parent._do_latex(self, callback, stop_on_error)
     
     def render_thumb(self):
         if self.doc is not None:

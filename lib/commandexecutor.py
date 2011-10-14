@@ -81,6 +81,3 @@ class CommandExecutor(object):
     def on_close(self, widget, event=None):
         self.window.hide()
         return True
-
-
-executor = CommandExecutor()

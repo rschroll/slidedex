@@ -3,11 +3,12 @@ import sys
 import gtk
 import glib
 import pango
+import poppler
 import gtksourceview2 as sourceview
-from misc import SEP, do_latex, LIBPATH
+from misc import SEP, LIBPATH
 from pdfviewer import PDFViewer
 from latexslide import LatexSlide
-from commandexecutor import executor
+from commandexecutor import CommandExecutor
 
 
 class EventDispatcher(object):
@@ -66,9 +67,8 @@ class LatexDocument(object):
         if filename is not None:
             glib.idle_add(self.load, filename)
         
-        # This is really ugly.  I need to decide if executor should belong
-        # to LatexDocument or be a singleton.
-        executor.window.set_transient_for(self.window)
+        self.executor = CommandExecutor()
+        self.executor.window.set_transient_for(self.window)
     
     def load(self, filename):
         dir = os.path.dirname(os.path.abspath(filename))
@@ -130,7 +130,25 @@ class LatexDocument(object):
     
     def compile(self, callback=None, stop_on_error=True):
         self.save()
-        do_latex(self, callback, stop_on_error)
+        self.do_latex(callback, stop_on_error)
+    
+    def do_latex(self, callback, stop_on_error):
+        self._do_latex(self, callback, stop_on_error)
+    
+    def _do_latex(self, obj, callback, stop_on_error):
+        # obj is either this LatexDocument or one of its LatexSlides
+        if obj.filename.endswith('.tex'):
+            fn = obj.filename[:-4]
+        else:
+            fn = obj.filename
+        
+        def after_latex(status):
+            if status == 0:
+                obj.doc = poppler.document_new_from_file('file://' + os.path.abspath(fn+'.pdf'), None)
+            if callback:
+                callback(status)
+        
+        self.executor.add((("latex", "-halt-on-error", fn), ("dvips", fn), ("ps2pdf", fn+'.ps')),stop_on_error, (after_latex,))
     
     def get_objects(self, builder):
         for object in ("window", 
