@@ -308,7 +308,10 @@ class LatexDocument(object):
             iter = None
         self.add_page(after=iter)
         self.slidelist_view.unselect_all()
-        self.slidelist_view.select_path((selection[0]+1,))#### selection + 1
+        if selection:
+            self.slidelist_view.select_path((selection[0]+1,))
+        else:
+            self.slidelist_view.select_path((0,))
         # Switch to slide editor and focus
         self.notebook.set_current_page(1)
         self.currslide_view.grab_focus()
