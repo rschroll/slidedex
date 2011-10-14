@@ -73,7 +73,8 @@ class LatexDocument(object):
     def load(self, filename):
         dir = os.path.dirname(os.path.abspath(filename))
         os.chdir(dir)
-        f = file(os.path.basename(filename), 'r')
+        self.filename = os.path.basename(filename)
+        f = file(self.filename, 'r')
         self._load(f)
     
     def _load(self, fobj):
@@ -129,7 +130,8 @@ class LatexDocument(object):
             self.window.set_title(name)
     
     def compile(self, callback=None, stop_on_error=True):
-        self.save()
+        if self.get_modified():
+            self.save()
         self.do_latex(callback, stop_on_error)
     
     def do_latex(self, callback, stop_on_error):
