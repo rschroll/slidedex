@@ -279,6 +279,12 @@ class LatexDocument(object):
         if len(selection) == 0 and self.prev_selection:
             view.select_path(self.prev_selection)
         elif len(selection) == 1:
+            # Changing the buffer removes any selection, so we copy the
+            # primary selection, if it exists.
+            oldbuffer = self.currslide_view.get_buffer()
+            if oldbuffer.get_has_selection():
+                oldbuffer.add_selection_clipboard(gtk.clipboard_get("PRIMARY"))
+            
             currslide, = self.pages.get(self.pages.get_iter(selection[0]), 0)
             self.currslide_view.set_buffer(currslide.buffer)
             self.currslide_view.set_sensitive(True)
