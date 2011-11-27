@@ -73,6 +73,9 @@ class LatexDocument(object):
             glib.idle_add(self.load, filename)
         
         self.executor = CommandExecutor(self)
+        
+        self.window.show()
+        gtk.main()
     
     @property
     def dir(self):
@@ -185,7 +188,7 @@ class LatexDocument(object):
                     <menuitem action="new"/>
                     <menuitem action="open"/>
                     <menuitem action="save"/>
-                    <menuitem action="saveas"/>
+                    <menuitem action="save-as"/>
                     <separator/>
                     <menuitem action="quit"/>
                 </menu>
@@ -194,6 +197,7 @@ class LatexDocument(object):
                     <menuitem action="compile-all"/>
                 </menu>
                 <menu action="slide">
+                    <menuitem action="new-slide"/>
                     <menuitem action="next-slide"/>
                     <menuitem action="prev-slide"/>
                 </menu>
@@ -211,7 +215,7 @@ class LatexDocument(object):
             </toolbar>
             <toolbar name="SlideBar" action="toolbar">
                 <separator/>
-                <toolitem action="new"/>
+                <toolitem action="new-slide"/>
                 <toolitem action="prev-slide"/>
                 <toolitem action="next-slide"/>
                 <separator/>
@@ -222,10 +226,10 @@ class LatexDocument(object):
         action_group.add_actions([
                 ('file',    None,       "_File"),
                 ('toolbar', None,       "Huh?"),
-                ('new',     gtk.STOCK_NEW,  "_New Slide",   "<control>n",   None, self.on_new_slide),
-                ('open',    gtk.STOCK_OPEN, "_Open in Tab", "<control>o",   None, self.blah),
+                ('new',     gtk.STOCK_NEW,  "_New Presentation", "<control><shift>n", None, self.on_new_pres),
+                ('open',    gtk.STOCK_OPEN, "_Open Presentation", "<control>o",   None, self.on_open_pres),
                 ('save',    gtk.STOCK_SAVE, "_Save",        "<control>s",   None, self.on_save),
-                ('saveas',  gtk.STOCK_SAVE_AS, "Save _As",  "<control><shift>s", None, self.save_as),
+                ('save-as',  gtk.STOCK_SAVE_AS, "Save _As",  "<control><shift>s", None, self.save_as),
                 ('quit',    gtk.STOCK_QUIT, None,           "<control>w",   None, self.on_quit),
                 
                 ('compile', None,       "_Compile"),
@@ -233,6 +237,7 @@ class LatexDocument(object):
                 ('compile-all',     gtk.STOCK_EXECUTE, "Compile Document", "<control><shift>Return", "Compile Document", self.on_compile_all),
                 
                 ('slide',  None,   "_Slide"),
+                ('new-slide', gtk.STOCK_NEW,  "_New Slide",   "<control>n",   None, self.on_new_slide),
                 ('next-slide',  gtk.STOCK_GO_FORWARD, "Next Slide",       "Page_Down",     None, self.on_next_slide),
                 ('prev-slide',  gtk.STOCK_GO_BACK,    "Previous Slide",   "Page_Up",       None, self.on_prev_slide),
         ])
@@ -388,5 +393,18 @@ class LatexDocument(object):
                 self.slidelist_view.unselect_all()
                 self.slidelist_view.select_path((selection-1,))
     
-    def blah(self, action):
-        print "Blah!"
+    def on_new_pres(self, action):
+        LatexDocument()
+    
+    def on_open_pres(self, action):
+        dialog = gtk.FileChooserDialog("Open...", self.window, gtk.FILE_CHOOSER_ACTION_OPEN,
+                                       (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                        gtk.STOCK_OPEN, gtk.RESPONSE_OK))
+        response = dialog.run()
+        if response == gtk.RESPONSE_OK:
+            filename = dialog.get_filename()
+            if not self._filename and not self.get_modified():
+                glib.idle_add(self.load, filename)
+            else:
+                glib.idle_add(lambda: LatexDocument(filename) and False)
+        dialog.destroy()
