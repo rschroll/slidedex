@@ -11,6 +11,10 @@ from latexslide import LatexSlide
 from commandexecutor import CommandExecutor
 
 
+class ObstinateUserError(Exception):
+    pass
+
+
 class EventDispatcher(object):
     def __init__(self, parent):
         self.parent = parent
@@ -21,7 +25,7 @@ class EventDispatcher(object):
             return getattr(getattr(self.parent, ob), shname)
         else:
             return getattr(self.parent, name)
-        
+
 
 class LatexDocument(object):
     def __init__(self, filename=None):
@@ -63,7 +67,7 @@ class LatexDocument(object):
         self.slidelist_view.set_pixbuf_column(1)
         self.slidelist_view.set_columns(1000)
         self._filename = None
-        self.dir = None
+        self._dir = None
         self.doc = None
         if filename is not None:
             glib.idle_add(self.load, filename)
@@ -71,14 +75,24 @@ class LatexDocument(object):
         self.executor = CommandExecutor(self)
     
     @property
+    def dir(self):
+        if not self._dir:
+            self.save_as()
+        if self._dir:
+            return self._dir
+        raise ObstinateUserError, "C'mon, we need a filename"
+    
+    @property
     def fullfilename(self):
-        if self.dir and self._filename:
-            return os.path.join(self.dir, self._filename)
-        return None
+        return os.path.join(self.dir, self._filename)
+    
+    @fullfilename.setter
+    def fullfilename(self, filename):
+        self._dir = os.path.dirname(os.path.abspath(filename))
+        self._filename = os.path.basename(filename)
     
     def load(self, filename):
-        self.dir = os.path.dirname(os.path.abspath(filename))
-        self._filename = os.path.basename(filename)
+        self.fullfilename = filename
         f = file(self.fullfilename, 'r')
         self._load(f)
     
@@ -108,8 +122,6 @@ class LatexDocument(object):
         fobj.write(SEP + self.footer.get_content())
     
     def save(self):
-        if self.fullfilename is None:
-            raise NotImplementedError, "Need filename to be set to save"
         f = file(self.fullfilename, 'w')
         self._save(f)
         f.close()
@@ -173,6 +185,7 @@ class LatexDocument(object):
                     <menuitem action="new"/>
                     <menuitem action="open"/>
                     <menuitem action="save"/>
+                    <menuitem action="saveas"/>
                     <separator/>
                     <menuitem action="quit"/>
                 </menu>
@@ -212,6 +225,7 @@ class LatexDocument(object):
                 ('new',     gtk.STOCK_NEW,  "_New Slide",   "<control>n",   None, self.on_new_slide),
                 ('open',    gtk.STOCK_OPEN, "_Open in Tab", "<control>o",   None, self.blah),
                 ('save',    gtk.STOCK_SAVE, "_Save",        "<control>s",   None, self.on_save),
+                ('saveas',  gtk.STOCK_SAVE_AS, "Save _As",  "<control><shift>s", None, self.save_as),
                 ('quit',    gtk.STOCK_QUIT, None,           "<control>w",   None, self.on_quit),
                 
                 ('compile', None,       "_Compile"),
@@ -253,7 +267,10 @@ class LatexDocument(object):
             if response in (gtk.RESPONSE_REJECT, gtk.RESPONSE_DELETE_EVENT):
                 return True
             if response == gtk.RESPONSE_YES:
-                self.save()
+                try:
+                    self.save()
+                except ObstinateUserError:
+                    return True
         return False
     
     def on_window_destroy(self, widget, data=None):
@@ -267,6 +284,17 @@ class LatexDocument(object):
     
     def on_save(self, action):
         self.save()
+    
+    def save_as(self, action=None):
+        dialog = gtk.FileChooserDialog("Save As...", self.window, gtk.FILE_CHOOSER_ACTION_SAVE,
+                                       (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                                        gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+        response = dialog.run()
+        if response == gtk.RESPONSE_OK:
+            self.fullfilename = dialog.get_filename()
+            self.set_modified(True)  # To update window title
+            self.save()
+        dialog.destroy()
     
     def on_view_slide(self, widget):
         if widget.get_active():

@@ -22,17 +22,15 @@ class LatexSlide(object):
     
     @property
     def fullfilename(self):
-        if self.parent.dir:
-            # Lazily create filename
-            if not self._filename:
-                # This is deprecated as a security risk, since the file could be
-                # created before you make it.  But we're not actually using this
-                # file; we're using the filename as a base, so the additional
-                # features of mkstemp don't help us avoid this problem.
-                filename = tempfile.mktemp(dir=self.parent.dir)
-                self._filename = os.path.basename(filename)
-            return os.path.join(self.parent.dir, self._filename)
-        return None
+        # Lazily create filename
+        if not self._filename:
+            # This is deprecated as a security risk, since the file could be
+            # created before you make it.  But we're not actually using this
+            # file; we're using the filename as a base, so the additional
+            # features of mkstemp don't help us avoid this problem.
+            filename = tempfile.mktemp(dir=self.parent.dir)
+            self._filename = os.path.basename(filename)
+        return os.path.join(self.parent.dir, self._filename)
     
     def set_content(self, content=""):
         self.buffer.begin_not_undoable_action()
@@ -70,5 +68,6 @@ class LatexSlide(object):
                 self.parent.pages[i][1] = self.pb
     
     def del_files(self):
-        for f in glob.glob(self.fullfilename + '*'):
-            os.unlink(f)
+        if self._filename:
+            for f in glob.glob(self.fullfilename + '*'):
+                os.unlink(f)
