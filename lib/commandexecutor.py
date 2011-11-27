@@ -3,9 +3,10 @@ import vte
 
 
 class CommandExecutor(object):
-    def __init__(self):
+    def __init__(self, parent):
         self.is_running = False
         self.command_queue = []
+        self.parent = parent
         
         self.window = gtk.Window()
         vbox = gtk.VBox()
@@ -29,6 +30,11 @@ class CommandExecutor(object):
         self.term.connect('child-exited', self.callback)
         self.window.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
         self.window.set_resizable(False)
+        self.window.set_transient_for(self.parent.window)
+    
+    @property
+    def dir(self):
+        return self.parent.dir
     
     def add(self, commands, stop_on_error=True, callback=None):
         self.command_queue.append([commands, stop_on_error, callback])
@@ -55,7 +61,7 @@ class CommandExecutor(object):
             self.command_queue.pop(0)
             self.run()
         else:
-            pid = self.term.fork_command(command[0], command)
+            pid = self.term.fork_command(command[0], command, directory=self.dir)
     
     def callback(self, term):
         status = term.get_child_exit_status()

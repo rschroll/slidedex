@@ -14,16 +14,25 @@ class LatexSlide(object):
         self.buffer = sourceview.Buffer(language=LATEXLANG)
         self.set_content(content)
         self.buffer.connect("modified-changed", self.parent.on_modified_changed)
-        # This is deprecated as a security risk, since the file could be
-        # created before you make it.  But we're not actually using this
-        # file; we're using the filename as a base, so the additional
-        # features of mkstemp don't help us avoid this problem.
-        filename = tempfile.mktemp(dir='./')
-        self.filename = os.path.basename(filename)
         self.doc = None
         self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
+        self._filename = None
         if render:
             self.compile(lambda status: not status and self.render_thumb(), False)
+    
+    @property
+    def fullfilename(self):
+        if self.parent.dir:
+            # Lazily create filename
+            if not self._filename:
+                # This is deprecated as a security risk, since the file could be
+                # created before you make it.  But we're not actually using this
+                # file; we're using the filename as a base, so the additional
+                # features of mkstemp don't help us avoid this problem.
+                filename = tempfile.mktemp(dir=self.parent.dir)
+                self._filename = os.path.basename(filename)
+            return os.path.join(self.parent.dir, self._filename)
+        return None
     
     def set_content(self, content=""):
         self.buffer.begin_not_undoable_action()
@@ -42,8 +51,8 @@ class LatexSlide(object):
         return self.buffer.get_modified()
     
     def compile(self, callback=None, stop_on_error=True):
-        f = file(self.filename + '.tex', 'w')
-        f.write(self.parent.header.get_content() + SEP + self.get_content() + 
+        f = file(self.fullfilename + '.tex', 'w')
+        f.write(self.parent.header.get_content() + SEP + self.get_content() +
                 SEP + self.parent.footer.get_content())
         f.close()
         self.do_latex(callback, stop_on_error)
@@ -61,6 +70,5 @@ class LatexSlide(object):
                 self.parent.pages[i][1] = self.pb
     
     def del_files(self):
-        for f in glob.glob(self.filename + '*'):
+        for f in glob.glob(self.fullfilename + '*'):
             os.unlink(f)
-

@@ -62,19 +62,24 @@ class LatexDocument(object):
         self.slidelist_view.set_model(self.pages)
         self.slidelist_view.set_pixbuf_column(1)
         self.slidelist_view.set_columns(1000)
-        self.filename = filename
+        self._filename = None
+        self.dir = None
         self.doc = None
         if filename is not None:
             glib.idle_add(self.load, filename)
         
-        self.executor = CommandExecutor()
-        self.executor.window.set_transient_for(self.window)
+        self.executor = CommandExecutor(self)
+    
+    @property
+    def fullfilename(self):
+        if self.dir and self._filename:
+            return os.path.join(self.dir, self._filename)
+        return None
     
     def load(self, filename):
-        dir = os.path.dirname(os.path.abspath(filename))
-        os.chdir(dir)
-        self.filename = os.path.basename(filename)
-        f = file(self.filename, 'r')
+        self.dir = os.path.dirname(os.path.abspath(filename))
+        self._filename = os.path.basename(filename)
+        f = file(self.fullfilename, 'r')
         self._load(f)
     
     def _load(self, fobj):
@@ -103,9 +108,9 @@ class LatexDocument(object):
         fobj.write(SEP + self.footer.get_content())
     
     def save(self):
-        if self.filename is None:
-            raise NotImplementedError, "Need .filename to be set to save"
-        f = file(self.filename, 'w')
+        if self.fullfilename is None:
+            raise NotImplementedError, "Need filename to be set to save"
+        f = file(self.fullfilename, 'w')
         self._save(f)
         f.close()
         self.set_modified(False)
@@ -123,7 +128,7 @@ class LatexDocument(object):
         return self.header.get_modified() or self.footer.get_modified()
     
     def on_modified_changed(self, buffer):
-        name = self.filename or "Unnamed Presentation"
+        name = self._filename or "Unnamed Presentation"
         if self.get_modified():
             self.window.set_title(name + '*')
         else:
@@ -139,10 +144,10 @@ class LatexDocument(object):
     
     def _do_latex(self, obj, callback, stop_on_error):
         # obj is either this LatexDocument or one of its LatexSlides
-        if obj.filename.endswith('.tex'):
-            fn = obj.filename[:-4]
+        if obj.fullfilename.endswith('.tex'):
+            fn = obj.fullfilename[:-4]
         else:
-            fn = obj.filename
+            fn = obj.fullfilename
         
         def after_latex(status):
             if status == 0:
