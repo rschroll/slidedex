@@ -1,3 +1,10 @@
+# Copyright 2010, 2011 Robert Schroll
+#
+# This file is part of SlideDeX and is distributed under the terms of
+# the BSD license.  See the file COPYING for full details.
+#
+######################################################################
+
 import os
 import sys
 import gtk
