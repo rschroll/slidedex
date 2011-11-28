@@ -60,7 +60,7 @@ Alternatively, you can download and unpack the tarball_.
 Currently, SlideDeX has no installation procedure.  Instead, run the
 script from wherever you downloaded it::
 
-  /path/to/install/slidedex/bin/slidex <filename>
+  /path/to/install/slidedex/bin/slidedex <filename>
 
 Usage
 -----
