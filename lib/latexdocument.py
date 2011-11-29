@@ -310,10 +310,12 @@ class LatexDocument(object):
     
     def on_view_slide(self, widget):
         if widget.get_active():
-            selection = self.slidelist_view.get_selected_items()[0]
-            # This should be okay except for weird race conditions....
-            currslide, = self.pages.get(self.pages.get_iter(selection), 0)
-            self.viewer.load_doc(currslide.doc)
+            selection = self.slidelist_view.get_selected_items()
+            if selection:
+                currslide, = self.pages.get(self.pages.get_iter(selection[0]), 0)
+                self.viewer.load_doc(currslide.doc)
+            else:  # In odd cases, there can be a document, but no slides.
+                self.viewer.load_doc(None)
     
     def on_view_presentation(self, widget):
         if widget.get_active():
