@@ -422,6 +422,7 @@ class LatexDocument(object):
                 self.prev_selection = None
                 self.slidelist_view.unselect_all()
                 self.slidelist_view.select_path((selection+1,))
+                self.slidelist_view.scroll_to_path((selection+1,), False, 0, 0)
     
     def on_prev_slide(self, action):
         selection = self.slidelist_view.get_selected_items()
@@ -431,6 +432,7 @@ class LatexDocument(object):
                 self.prev_selection = None
                 self.slidelist_view.unselect_all()
                 self.slidelist_view.select_path((selection-1,))
+                self.slidelist_view.scroll_to_path((selection-1,), False, 0, 0)
     
     def on_new_pres(self, action):
         LatexDocument()
