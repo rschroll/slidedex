@@ -76,6 +76,7 @@ class LatexDocument(object):
         self._filename = None
         self._dir = None
         self.doc = None
+        self._loaded = True
         if filename is not None:
             glib.idle_add(self.load, filename)
         
@@ -107,6 +108,7 @@ class LatexDocument(object):
         self._load(f)
     
     def _load(self, fobj):
+        self._loaded = False
         str = fobj.read()
         segments = str.split(SEP)
         if len(segments) < 2:
@@ -117,6 +119,7 @@ class LatexDocument(object):
         for s in segments[1:-1]:
             self.add_page(s)
         self.compile(lambda status: self.slidelist_view.select_path((0,)))
+        self._loaded = True
     
     def add_page(self, content="", after=None):
         slide = LatexSlide(self, content, render=(content is not ""))
@@ -138,16 +141,24 @@ class LatexDocument(object):
         self.set_modified(False)
     
     def set_modified(self, mod):
+        self.header.set_modified(mod)
+        if True:  # We only need to set one to True
+            return
+        self.footer.set_modified(mod)
         for p in self.pages:
             p[0].set_modified(mod)
-        self.header.set_modified(mod)
-        self.footer.set_modified(mod)
     
     def get_modified(self):
+        if self.header.get_modified() or self.footer.get_modified():
+            # Check these first since we set header as modified when the
+            # slide ordering changes.  In that case, all of the pages
+            # may not have their LatexSlides yet, so we want to short-
+            # circuit here.
+            return True
         for p in self.pages:
             if p[0].get_modified():
                 return True
-        return self.header.get_modified() or self.footer.get_modified()
+        return False
     
     def on_modified_changed(self, buffer):
         name = self._filename or "Unnamed Presentation"
@@ -344,10 +355,14 @@ class LatexDocument(object):
     # Right now, these two are used by drag-and-drop reordering
     def on_row_inserted(self, model, path, iter):
         self.prev_selection = path
+        if self._loaded:
+            self.set_modified(True)
     
     def on_row_deleted(self, model, path):
         if path[0] < self.prev_selection[0]:
             self.prev_selection = (self.prev_selection[0] - 1,)
+        if self._loaded:
+            self.set_modified(True)
     
     def on_rows_reordered(self, model, path, iter, new_order):
         print "Reordered:", path, new_order
