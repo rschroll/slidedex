@@ -63,7 +63,7 @@ class LatexSlide(object):
         self.do_latex(callback, stop_on_error)
     
     def do_latex(self, callback, stop_on_error):
-        self.parent._do_latex(self, callback, stop_on_error)
+        self.parent._do_latex(self, self.parent.settings.slide_command, callback, stop_on_error)
     
     def render_thumb(self):
         if self.doc is not None:

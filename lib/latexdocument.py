@@ -184,9 +184,9 @@ class LatexDocument(object):
         self.do_latex(callback, stop_on_error)
     
     def do_latex(self, callback, stop_on_error):
-        self._do_latex(self, callback, stop_on_error)
+        self._do_latex(self, self.settings.pres_command, callback, stop_on_error)
     
-    def _do_latex(self, obj, callback, stop_on_error):
+    def _do_latex(self, obj, command, callback, stop_on_error):
         # obj is either this LatexDocument or one of its LatexSlides
         if obj.fullfilename.endswith('.tex'):
             fn = obj.fullfilename[:-4]
@@ -199,7 +199,8 @@ class LatexDocument(object):
             if callback:
                 callback(status)
         
-        self.executor.add((("latex", "-halt-on-error", fn), ("dvips", fn), ("ps2pdf", fn+'.ps')),stop_on_error, (after_latex,))
+        commands = [[s.format(fn=fn) for s in c.split()] for c in command.split(';')]
+        self.executor.add(commands, stop_on_error, (after_latex,))
     
     def get_objects(self, builder):
         for object in ("window", 
