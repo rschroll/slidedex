@@ -5,11 +5,9 @@
 #
 ######################################################################
 
-import os
 import gtk
-import poppler
 
-SEP = "\n%%SLIDEEDIT%%\n"
+SEP = "\n%%SLIDEDEX%%\n"
 
 def render_to_pixbuf(page, msize):
     psize = page.get_size() # floats

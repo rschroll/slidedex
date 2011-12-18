@@ -16,6 +16,7 @@ from misc import SEP, LIBPATH
 from pdfviewer import PDFViewer
 from latexslide import LatexSlide
 from commandexecutor import CommandExecutor
+from documentsettings import DocumentSettings
 
 
 class ObstinateUserError(Exception):
@@ -48,6 +49,7 @@ class LatexDocument(object):
         self.viewer = PDFViewer(builder)
         builder.connect_signals(EventDispatcher(self))
         
+        self.settings = None
         self.header = LatexSlide(self, render=False)
         self.footer = LatexSlide(self, render=False)
         self.header_view = sourceview.View(self.header.buffer)
@@ -109,14 +111,17 @@ class LatexDocument(object):
     
     def _load(self, fobj):
         self._loaded = False
+        if not fobj.readline().startswith(SEP[1:-1]):  # Skip newlines
+            raise IOError, "Not a SlideDeX file"
         str = fobj.read()
         segments = str.split(SEP)
-        if len(segments) < 2:
+        if len(segments) < 3:
             raise IOError, "Could not load from file"
+        self.settings = DocumentSettings(segments[0])
         self.pages.clear()
-        self.header.set_content(segments[0])
+        self.header.set_content(segments[1])
         self.footer.set_content(segments[-1])
-        for s in segments[1:-1]:
+        for s in segments[2:-1]:
             self.add_page(s)
         self.compile(lambda status: self.slidelist_view.select_path((0,)))
         self._loaded = True
@@ -132,6 +137,9 @@ class LatexDocument(object):
         self.pages.remove(iter)
     
     def _save(self, fobj):
+        fobj.write(SEP[1:])  # Skip initial newline
+        fobj.write(self.settings.write())
+        fobj.write(SEP[1:])  # Skip initial newline
         fobj.write(self.header.get_content())
         for p in self.pages:
             fobj.write(SEP + p[0].get_content())
