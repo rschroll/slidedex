@@ -145,7 +145,7 @@ class LatexDocument(object):
     
     def set_modified(self, mod):
         self.header.set_modified(mod)
-        if True:  # We only need to set one to True
+        if mod:  # We only need to set one to True
             return
         self.footer.set_modified(mod)
         for p in self.pages:
