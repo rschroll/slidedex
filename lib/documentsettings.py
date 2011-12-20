@@ -11,6 +11,7 @@ try:
 except ImportError:
     from ordereddict import OrderedDict
 from StringIO import StringIO
+import glib
 
 DEFAULT_COMMAND = 'latex -halt-on-error {fn}; dvips {fn}; ps2pdf {fn}.ps'
 
@@ -19,7 +20,8 @@ class SettingsError(Exception):
 
 class DocumentSettings(object):
     
-    def __init__(self, input_string):
+    def __init__(self, parent, input_string):
+        self.parent = parent
         self.parser = ConfigParser.RawConfigParser(dict_type=OrderedDict)
         self.parser.add_section('commands')
         self.parser.set('commands', 'slide', DEFAULT_COMMAND)
@@ -36,6 +38,7 @@ class DocumentSettings(object):
                 raise SettingsError, "Invalid line start"
         settings_string.seek(0)
         self.parser.readfp(settings_string)
+        glib.idle_add(self.parent.generate_skeleton_menu)
     
     def write(self):
         settings_string = StringIO()
@@ -55,6 +58,6 @@ class DocumentSettings(object):
     @property
     def skeletons(self):
         skels = OrderedDict(self.parser.items('skeletons'))
-        if not 'blank' in skels:
-            skels['blank'] = ''
+        if not 'Blank' in skels:
+            skels['Blank'] = ''
         return skels

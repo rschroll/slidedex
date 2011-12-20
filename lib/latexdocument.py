@@ -117,7 +117,7 @@ class LatexDocument(object):
         segments = str.split(SEP)
         if len(segments) < 3:
             raise IOError, "Could not load from file"
-        self.settings = DocumentSettings(segments[0])
+        self.settings = DocumentSettings(self, segments[0])
         self.pages.clear()
         self.header.set_content(segments[1])
         self.footer.set_content(segments[-1])
@@ -126,8 +126,8 @@ class LatexDocument(object):
         self.compile(lambda status: self.slidelist_view.select_path((0,)))
         self._loaded = True
     
-    def add_page(self, content="", after=None):
-        slide = LatexSlide(self, content, render=(content is not ""))
+    def add_page(self, content="", after=None, render=True):
+        slide = LatexSlide(self, content, render=(render and content))
         if after is not None:
             self.pages.insert_after(after, (slide, slide.pb))
         else:
@@ -226,8 +226,8 @@ class LatexDocument(object):
                     <menuitem action="compile-page"/>
                     <menuitem action="compile-all"/>
                 </menu>
-                <menu action="slide">
-                    <menuitem action="new-slide"/>
+                <menu action="slide" name="Slide">
+                    <menuitem action="new-slide-menu" name="NewSlide"/>
                     <menuitem action="delete-slide"/>
                     <menuitem action="next-slide"/>
                     <menuitem action="prev-slide"/>
@@ -246,7 +246,7 @@ class LatexDocument(object):
             </toolbar>
             <toolbar name="SlideBar" action="toolbar">
                 <separator/>
-                <toolitem action="new-slide"/>
+                <toolitem action="new-slide-toolbar"/>
                 <toolitem action="delete-slide"/>
                 <toolitem action="prev-slide"/>
                 <toolitem action="next-slide"/>
@@ -269,7 +269,8 @@ class LatexDocument(object):
                 ('compile-all',     gtk.STOCK_EXECUTE, "Compile Document", "<control><shift>Return", "Compile Document", self.on_compile_all),
                 
                 ('slide',  None,   "_Slide"),
-                ('new-slide', gtk.STOCK_NEW,          "_New Slide",       "<shift>Insert", None, self.on_new_slide),
+                ('new-slide-menu', gtk.STOCK_NEW,     "_New Slide",       "", None, None),
+                ('new-slide-toolbar', gtk.STOCK_NEW,  "_New Slide",       "", None, self.on_new_slide_toolbar),
                 ('delete-slide', gtk.STOCK_DELETE,    "_Delete Slide",    "<shift>Delete", None, self.on_delete_slide),
                 ('next-slide',  gtk.STOCK_GO_FORWARD, "Next Slide",       "Page_Down",     None, self.on_next_slide),
                 ('prev-slide',  gtk.STOCK_GO_BACK,    "Previous Slide",   "Page_Up",       None, self.on_prev_slide),
@@ -282,12 +283,30 @@ class LatexDocument(object):
         ui_manager.insert_action_group(action_group)
         ui_manager.add_ui_from_string(UI_STRING)
         ui_manager.ensure_update()
-        self.window.add_accel_group(ui_manager.get_accel_group())
+        self._accel_group = ui_manager.get_accel_group()
+        self.window.add_accel_group(self._accel_group)
         slidebar = ui_manager.get_widget("/SlideBar")
         slidebar.set_orientation(gtk.ORIENTATION_VERTICAL)
         slidebar.set_style(gtk.TOOLBAR_ICONS)
         slidebar.set_property('icon-size', gtk.ICON_SIZE_BUTTON) #MENU)
+        self.skel_menu = gtk.Menu()
+        ui_manager.get_widget("/TopMenu/Slide/NewSlide").set_submenu(self.skel_menu)
         return ui_manager.get_widget("/TopMenu"), ui_manager.get_widget("/ToolBar"), slidebar
+    
+    def generate_skeleton_menu(self):
+        for item in self.skel_menu.get_children():
+            self.skel_menu.remove(item)
+        
+        first = True
+        for key, val in self.settings.skeletons.items():
+            menuitem = gtk.MenuItem(key)
+            menuitem.connect('activate', self.on_new_slide, val)
+            menuitem.show()
+            self.skel_menu.append(menuitem)
+            if first:
+                key, mod = gtk.accelerator_parse("<shift>Insert")
+                menuitem.add_accelerator('activate', self._accel_group, key, mod, gtk.ACCEL_VISIBLE)
+                first = False
     
     def on_window_delete(self, widget, event):
         if self.get_modified():
@@ -386,14 +405,17 @@ class LatexDocument(object):
     def on_rows_reordered(self, model, path, iter, new_order):
         print "Reordered:", path, new_order
     
-    def on_new_slide(self, action):
+    def on_new_slide_toolbar(self, action):
+        self.skel_menu.popup(None, None, None, 1, gtk.get_current_event_time())
+    
+    def on_new_slide(self, action, content=""):
         selection = self.slidelist_view.get_selected_items()
         if selection:
             selection = selection[0]
             iter = self.pages.get_iter(selection)
         else:
             iter = None
-        self.add_page(after=iter)
+        self.add_page(content, after=iter, render=False)
         self.slidelist_view.unselect_all()
         if selection:
             self.slidelist_view.select_path((selection[0]+1,))
