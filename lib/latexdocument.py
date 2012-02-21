@@ -11,6 +11,7 @@ import gtk
 import glib
 import pango
 import poppler
+import gtkspell
 import gtksourceview2 as sourceview
 from misc import SEP, LIBPATH
 from pdfviewer import PDFViewer
@@ -53,12 +54,15 @@ class LatexDocument(object):
         self.header = LatexSlide(self, render=False)
         self.footer = LatexSlide(self, render=False)
         self.header_view = sourceview.View(self.header.buffer)
+        gtkspell.Spell(self.header_view)
         builder.get_object("scrolledwindow1").add(self.header_view)
         self.currslide_view = sourceview.View()
+        gtkspell.Spell(self.currslide_view)
         builder.get_object("scrolledwindow2").add(self.currslide_view)
         #self.empty_buffer = self.currslide_view.get_buffer()
         self.currslide_view.set_sensitive(False)
         self.footer_view = sourceview.View(self.footer.buffer)
+        gtkspell.Spell(self.footer_view)
         builder.get_object("scrolledwindow3").add(self.footer_view)
         font_desc = pango.FontDescription('monospace')
         for view in (self.header_view, self.currslide_view, self.footer_view):
