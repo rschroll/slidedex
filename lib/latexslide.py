@@ -16,14 +16,16 @@ LATEXLANG = sourceview.language_manager_get_default().get_language('latex')
 
 class LatexSlide(object):
     
-    def __init__(self, parent, content="", render=True):
+    def __init__(self, parent, content="", render=False):
         self.parent = parent
         self.buffer = sourceview.Buffer(language=LATEXLANG)
         self.set_content(content)
-        self.buffer.connect("modified-changed", self.parent.on_modified_changed)
+        self.buffer.connect("modified-changed", self.on_buffer_modified_changed)
         self.doc = None
         self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
         self._filename = None
+        self._modified_since_save = False
+        self._modified_since_compile = True
         if render:
             self.compile(lambda status: not status and self.render_thumb(), False)
     
@@ -49,17 +51,38 @@ class LatexSlide(object):
     def get_content(self):
         return self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter())
     
-    def set_modified(self, mod):
-        self.buffer.set_modified(mod)
+    def on_buffer_modified_changed(self, buffer):
+        if buffer.get_modified():
+            self.modified_since_save = True
+            self.modified_since_compile = True
     
-    def get_modified(self):
-        return self.buffer.get_modified()
+    @property
+    def modified_since_save(self):
+        return self._modified_since_save
+    
+    @modified_since_save.setter
+    def modified_since_save(self, value):
+        self._modified_since_save = value
+        if value == False:
+            self.buffer.set_modified(False)
+        self.parent.on_modified_changed()
+    
+    @property
+    def modified_since_compile(self):
+        return self._modified_since_compile
+    
+    @modified_since_compile.setter
+    def modified_since_compile(self, value):
+        self._modified_since_compile = value
+        if value == False:
+            self.buffer.set_modified(False)
     
     def compile(self, callback=None, stop_on_error=True):
         f = file(self.fullfilename + '.tex', 'w')
         f.write(self.parent.header.get_content() + SEP + self.get_content() +
                 SEP + self.parent.footer.get_content())
         f.close()
+        self.modified_since_compile = False
         self.do_latex(callback, stop_on_error)
     
     def do_latex(self, callback, stop_on_error):
@@ -78,3 +101,17 @@ class LatexSlide(object):
         if self._filename:
             for f in glob.glob(self.fullfilename + '*'):
                 os.unlink(f)
+
+class HeaderFooter(LatexSlide):
+    
+    @property
+    def modified_since_compile(self):
+        return None  # This won't be called.
+    
+    @modified_since_compile.setter
+    def modified_since_compile(self, value):
+        if value:
+            for p,_ in self.parent.pages:
+                p.modified_since_compile = True
+            # Make sure we get notified the next time it changes.
+            self.buffer.set_modified(False)

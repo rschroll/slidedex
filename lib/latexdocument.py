@@ -15,7 +15,7 @@ import gtkspell
 import gtksourceview2 as sourceview
 from misc import SEP, LIBPATH
 from pdfviewer import PDFViewer
-from latexslide import LatexSlide
+from latexslide import LatexSlide, HeaderFooter
 from commandexecutor import CommandExecutor
 from documentsettings import DocumentSettings
 
@@ -51,8 +51,8 @@ class LatexDocument(object):
         builder.connect_signals(EventDispatcher(self))
         
         self.settings = None
-        self.header = LatexSlide(self, render=False)
-        self.footer = LatexSlide(self, render=False)
+        self.header = HeaderFooter(self)
+        self.footer = HeaderFooter(self)
         self.header_view = sourceview.View(self.header.buffer)
         gtkspell.Spell(self.header_view)
         builder.get_object("scrolledwindow1").add(self.header_view)
@@ -83,6 +83,7 @@ class LatexDocument(object):
         self._dir = None
         self.doc = None
         self._loaded = True
+        self._order_modified = False
         if filename is not None:
             glib.idle_add(self.load, filename)
         
@@ -130,7 +131,7 @@ class LatexDocument(object):
         self.compile(lambda status: self.slidelist_view.select_path((0,)))
         self._loaded = True
     
-    def add_page(self, content="", after=None, render=True):
+    def add_page(self, content="", after=None, render=False):
         slide = LatexSlide(self, content, render=(render and content))
         if after is not None:
             self.pages.insert_after(after, (slide, slide.pb))
@@ -153,37 +154,48 @@ class LatexDocument(object):
         f = file(self.fullfilename, 'w')
         self._save(f)
         f.close()
-        self.set_modified(False)
+        self.modified = False
     
-    def set_modified(self, mod):
-        self.header.set_modified(mod)
-        if mod:  # We only need to set one to True
-            return
-        self.footer.set_modified(mod)
-        for p in self.pages:
-            p[0].set_modified(mod)
-    
-    def get_modified(self):
-        if self.header.get_modified() or self.footer.get_modified():
+    @property
+    def modified(self):
+        if self._order_modified or self.header.modified_since_save \
+                or self.footer.modified_since_save:
             # Check these first since we set header as modified when the
             # slide ordering changes.  In that case, all of the pages
             # may not have their LatexSlides yet, so we want to short-
             # circuit here.
             return True
         for p in self.pages:
-            if p[0].get_modified():
+            if p[0].modified_since_save:
                 return True
         return False
     
-    def on_modified_changed(self, buffer):
+    @modified.setter
+    def modified(self, mod):
+        self._order_modified = mod
+        self.on_modified_changed()  # We might not have a page that will call this.
+        if mod:  # We only need to set one to True
+            return
+        self.header.modified_since_save = mod
+        self.footer.modified_since_save = mod
+        for p in self.pages:
+            p[0].modified_since_save = mod
+    
+    def on_modified_changed(self):
         name = self._filename or "Unnamed Presentation"
-        if self.get_modified():
+        if self.modified:
             self.window.set_title(name + '*')
         else:
             self.window.set_title(name)
     
     def compile(self, callback=None, stop_on_error=True):
-        if self.get_modified():
+        for p,_ in self.pages:
+            if p.modified_since_compile:
+                def pagecallback(status, page=p):  # Freeze p
+                    if status == 0:
+                        page.render_thumb()
+                p.compile(pagecallback, False)
+        if self.modified:
             self.save()
         self.do_latex(callback, stop_on_error)
     
@@ -313,7 +325,7 @@ class LatexDocument(object):
                 first = False
     
     def on_window_delete(self, widget, event):
-        if self.get_modified():
+        if self.modified:
             dialog = gtk.MessageDialog(self.window, 
                         gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
                         gtk.MESSAGE_WARNING, gtk.BUTTONS_NONE)
@@ -353,7 +365,7 @@ class LatexDocument(object):
         response = dialog.run()
         if response == gtk.RESPONSE_OK:
             self.fullfilename = dialog.get_filename()
-            self.set_modified(True)  # To update window title
+            self.modified = True  # To update window title
             self.save()
         dialog.destroy()
     
@@ -398,13 +410,13 @@ class LatexDocument(object):
     def on_row_inserted(self, model, path, iter):
         self.prev_selection = path
         if self._loaded:
-            self.set_modified(True)
+            self.modified = True
     
     def on_row_deleted(self, model, path):
         if path[0] < self.prev_selection[0]:
             self.prev_selection = (self.prev_selection[0] - 1,)
         if self._loaded:
-            self.set_modified(True)
+            self.modified = True
     
     def on_rows_reordered(self, model, path, iter, new_order):
         print "Reordered:", path, new_order
@@ -419,7 +431,7 @@ class LatexDocument(object):
             iter = self.pages.get_iter(selection)
         else:
             iter = None
-        self.add_page(content, after=iter, render=False)
+        self.add_page(content, after=iter)
         self.slidelist_view.unselect_all()
         if selection:
             self.slidelist_view.select_path((selection[0]+1,))
@@ -445,7 +457,6 @@ class LatexDocument(object):
             currslide.compile(callback)
     
     def on_compile_all(self, action):
-        self.save()
         self.compile(lambda status: not status and self.view_presentation_button.clicked())
     
     
@@ -479,7 +490,7 @@ class LatexDocument(object):
         response = dialog.run()
         if response == gtk.RESPONSE_OK:
             filename = dialog.get_filename()
-            if not self._filename and not self.get_modified():
+            if not self._filename and not self.modified:
                 glib.idle_add(self.load, filename)
             else:
                 glib.idle_add(lambda: LatexDocument(filename) and False)
