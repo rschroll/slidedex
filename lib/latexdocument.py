@@ -37,6 +37,12 @@ class EventDispatcher(object):
 
 
 class LatexDocument(object):
+    
+    SAME_WIDGET = 1000
+    TEXT = 1001
+    TARGETS = [('SLIDEDEX_SLIDE', gtk.TARGET_SAME_WIDGET, SAME_WIDGET),
+               ('text/plain', 0, TEXT)]
+    
     def __init__(self, filename=None):
         builder = gtk.Builder()
         builder.add_from_file(os.path.join(LIBPATH, "mainwindow.glade"))
@@ -79,6 +85,14 @@ class LatexDocument(object):
         self.slidelist_view.set_model(self.pages)
         self.slidelist_view.set_pixbuf_column(1)
         self.slidelist_view.set_columns(1000)
+        
+        self.slidelist_view.enable_model_drag_source(gtk.gdk.BUTTON1_MASK, self.TARGETS, 
+                                                     gtk.gdk.ACTION_MOVE | gtk.gdk.ACTION_COPY)
+        self.slidelist_view.enable_model_drag_dest(self.TARGETS,
+                                                   gtk.gdk.ACTION_MOVE | gtk.gdk.ACTION_COPY)
+        self.slidelist_view.connect('drag-data-get', self.on_drag_data_get)
+        self.slidelist_view.connect('drag-data-received', self.on_drag_data_received)
+        
         self._filename = None
         self._dir = None
         self.doc = None
@@ -131,10 +145,12 @@ class LatexDocument(object):
         self.compile(lambda status: self.slidelist_view.select_path((0,)))
         self._loaded = True
     
-    def add_page(self, content="", after=None, render=False):
+    def add_page(self, content="", after=None, before=None, render=False):
         slide = LatexSlide(self, content, render=(render and content))
         if after is not None:
             self.pages.insert_after(after, (slide, slide.pb))
+        elif before is not None:
+            self.pages.insert_before(before, (slide, slide.pb))
         else:
             self.pages.append((slide, slide.pb))
     
@@ -383,11 +399,11 @@ class LatexDocument(object):
             self.viewer.load_doc(self.doc)
     
     def on_selection_changed(self, view):
-        selection = view.get_selected_items()
+        selection = self.slidelist_view.get_selected_items()
         if len(selection) == 0 and self.prev_selection and len(self.pages):
             if self.prev_selection[0] >= len(self.pages):
                 self.prev_selection = (len(self.pages) - 1,)
-            view.select_path(self.prev_selection)
+            self.slidelist_view.select_path(self.prev_selection)
         elif len(selection) == 1:
             # Changing the buffer removes any selection, so we copy the
             # primary selection, if it exists.
@@ -419,7 +435,7 @@ class LatexDocument(object):
             self.modified = True
     
     def on_rows_reordered(self, model, path, iter, new_order):
-        print "Reordered:", path, new_order
+        self.modified = True
     
     def on_new_slide_toolbar(self, action):
         self.skel_menu.popup(None, None, None, 1, gtk.get_current_event_time())
@@ -445,6 +461,95 @@ class LatexDocument(object):
         for selection in self.slidelist_view.get_selected_items():
             iter = self.pages.get_iter(selection)
             self.delete_page(iter)
+    
+    # http://www.pygtk.org/pygtk2tutorial/sec-TreeViewDragAndDrop.html
+    def on_drag_data_get(self, iconview, context, selection_data, target_id, etime):
+        if target_id == self.SAME_WIDGET and context.action == gtk.gdk.ACTION_MOVE:
+            self.drag_get_reorder(selection_data)
+        else:
+            self.drag_get_create(selection_data)
+    
+    def on_drag_data_received(self, iconview, context, x, y, selection_data, target_id, etime):
+        drop_info = self.slidelist_view.get_dest_item_at_pos(x, y)
+        if target_id == self.SAME_WIDGET and context.action == gtk.gdk.ACTION_MOVE:
+            self.drag_received_reorder(context, drop_info, selection_data, etime)
+        else:
+            self.drag_received_create(context, drop_info, selection_data, etime)
+    
+    def drag_get_reorder(self, selection_data):
+        data = repr(self.slidelist_view.get_selected_items())
+        selection_data.set(selection_data.target, 8, data)
+    
+    def drag_received_reorder(self, context, drop_info, selection_data, etime):
+        data = eval(selection_data.data) # [(a,), (b,) ...
+        data = [d[0] for d in data]      # [a, b, ...
+        data.sort()
+        
+        if drop_info:
+            path, position = drop_info
+            index = path[0]
+            if position not in (gtk.ICON_VIEW_DROP_LEFT, gtk.ICON_VIEW_DROP_ABOVE):
+                index += 1
+        else:
+            index = len(self.pages)
+        
+        index0 = index
+        order = range(len(self.pages))
+        for d in data:
+            order.remove(d)
+            if d < index0:
+                index -= 1
+        assert(index >= 0)
+        self.pages.reorder(order[:index] + data + order[index:])
+    
+    def drag_get_create(self, selection_data):
+        data = []
+        # Note that this puts the slides in reverse order.
+        for selection in self.slidelist_view.get_selected_items():
+            slide, = self.pages.get(self.pages.get_iter(selection), 0)
+            data.append(slide.get_content())
+        selection_data.set(selection_data.target, 8, SEP.join(data))
+    
+    def drag_received_create(self, context, drop_info, selection_data, etime):
+        data = selection_data.data.split(SEP)
+        self.prev_selection = None  # Disable unselect preventer
+        self.slidelist_view.unselect_all()
+        if drop_info:
+            path, position = drop_info
+            iter = self.pages.get_iter(path)
+            if position in (gtk.ICON_VIEW_DROP_LEFT, gtk.ICON_VIEW_DROP_ABOVE):
+                data.reverse()  # Put in forward order, since we'll insert them all
+                newpath = path  # before the same element.
+                for d in data:
+                    self.add_page(d, before=iter, render=True)
+                    self.slidelist_view.select_path(newpath)
+                    newpath = (newpath[0] + 1,)
+                # Scroll to the right if needed.  (The left will be where we dropped it,
+                # and therefore already in view
+                self.slidelist_view.scroll_to_path((newpath[0] - 1,), False, 0, 0)
+            else:
+                newpath = (path[0] + 1,)
+                # We want the data in reverse order, since we'll be inserting them
+                # all after the same element.
+                for d in data:
+                    self.add_page(d, after=iter, render=True)
+                    self.slidelist_view.select_path(newpath)
+                self.slidelist_view.scroll_to_path((path[0] + len(data),), False, 0, 0)
+        else:
+            for d in data:
+                self.add_page(d, render=True)
+                self.slidelist_view.select_path((len(self.pages) - 1,))
+            self.slidelist_view.scroll_to_path((len(self.page)-1,), False, 0, 0)
+        
+        # Run on_selection_changed when we're done rendering all the new pages, so
+        # we can load the current document into the viewer.  This doesn't work if
+        # we have multiple pages chosen, but the page view is sorta odd in that
+        # case, regardless.  Running the "dir" command is a kludge, but it should
+        # exist on both Linux and Windows.
+        self.executor.add([["dir"]], False, (self.on_selection_changed,))
+        
+        if context.action == gtk.gdk.ACTION_MOVE:
+            context.finish(True, True, etime)
     
     def on_compile_page(self, action):
         selection = self.slidelist_view.get_selected_items()
