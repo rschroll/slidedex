@@ -44,6 +44,23 @@ class CommandExecutor(object):
         return self.parent.dir
     
     def add(self, commands, stop_on_error=True, callback=None):
+        """ Add specified commands to the executor, and begin running if paused.
+        
+        Input:  commands:       A list of commands to be run.  Each command is itself
+                                a list, corresponding to the argv of the to be run.
+                                That is, commands[i] = [program, arg1, arg2, ... ]
+                
+                stop_on_error:  Whether to running this and all queued commands on
+                                reaching an error.
+                
+                callback:       The callback to be run when the commands have finished
+                                or reached an error.  Either None (no callback), or a
+                                list, where the first element is the callback function
+                                and the rest are additional arguments.  The first
+                                argument passed to the callback function is the status,
+                                0 for success or the non-zero error code received.
+        """
+        
         self.command_queue.append([commands, stop_on_error, callback])
         if not self.is_running:
             self.is_running = True
@@ -69,6 +86,7 @@ class CommandExecutor(object):
             self.run()
         else:
             pid = self.term.fork_command(command[0], command, directory=self.dir)
+            # Control will be picked up in callback() next.
     
     def callback(self, term):
         status = term.get_child_exit_status()
