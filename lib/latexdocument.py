@@ -539,7 +539,7 @@ class LatexDocument(object):
             for d in data:
                 self.add_page(d, render=True)
                 self.slidelist_view.select_path((len(self.pages) - 1,))
-            self.slidelist_view.scroll_to_path((len(self.page)-1,), False, 0, 0)
+            self.slidelist_view.scroll_to_path((len(self.pages)-1,), False, 0, 0)
         
         # Run on_selection_changed when we're done rendering all the new pages, so
         # we can load the current document into the viewer.  This doesn't work if
