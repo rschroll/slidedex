@@ -10,6 +10,9 @@ import vte
 
 
 class CommandExecutor(object):
+    
+    NOOP = -1
+    
     def __init__(self, parent):
         self.is_running = False
         self.command_queue = []
@@ -71,6 +74,17 @@ class CommandExecutor(object):
             self.term.reset(True, True)
             self.run()
     
+    def add_callback(self, callback, *args):
+        """ Add a callback to the command queue without any associated commands.
+        
+        Input:  callback:   The callback function.  The first argument will be the
+                            status of the *previous* command run.
+                
+                args:       Additional user arguments passed to the callback.
+        """
+        
+        self.add([self.NOOP], callback=(callback,) + args)
+    
     def run(self):
         try:
             commands, stop_on_error, callback = self.command_queue[0]
@@ -85,8 +99,11 @@ class CommandExecutor(object):
             self.command_queue.pop(0)
             self.run()
         else:
-            pid = self.term.fork_command(command[0], command, directory=self.dir)
-            # Control will be picked up in callback() next.
+            if command is self.NOOP:
+                self.callback(self.term)
+            else:
+                pid = self.term.fork_command(command[0], command, directory=self.dir)
+                # Control will be picked up in callback() next.
     
     def callback(self, term):
         status = term.get_child_exit_status()

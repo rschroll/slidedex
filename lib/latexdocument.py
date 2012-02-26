@@ -544,9 +544,8 @@ class LatexDocument(object):
         # Run on_selection_changed when we're done rendering all the new pages, so
         # we can load the current document into the viewer.  This doesn't work if
         # we have multiple pages chosen, but the page view is sorta odd in that
-        # case, regardless.  Running the "dir" command is a kludge, but it should
-        # exist on both Linux and Windows.
-        self.executor.add([["dir"]], False, (self.on_selection_changed,))
+        # case, regardless.
+        self.executor.add_callback(self.on_selection_changed)
         
         if context.action == gtk.gdk.ACTION_MOVE:
             context.finish(True, True, etime)
