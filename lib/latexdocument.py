@@ -24,6 +24,13 @@ class ObstinateUserError(Exception):
     pass
 
 
+def base_filename(fn):
+    if fn.endswith('.tex'):
+        return fn[:-4]
+    else:
+        return fn
+
+
 class EventDispatcher(object):
     def __init__(self, parent):
         self.parent = parent
@@ -142,7 +149,15 @@ class LatexDocument(object):
         self.footer.set_content(segments[-1])
         for s in segments[2:-1]:
             self.add_page(s)
-        self.compile(lambda status: self.slidelist_view.select_path((0,)))
+        
+        pdffn = base_filename(self.fullfilename) + '.pdf'
+        select_first_page = lambda status: self.slidelist_view.select_path((0,))
+        if os.path.exists(pdffn) and os.stat(pdffn).st_mtime >= os.stat(self.fullfilename).st_mtime:
+            self.compile_pages()
+            self.doc = poppler.document_new_from_file('file://' + os.path.abspath(pdffn), None)
+            self.executor.add_callback(select_first_page)
+        else:
+            self.compile(select_first_page)
         self._loaded = True
     
     def add_page(self, content="", after=None, before=None, render=False):
@@ -204,13 +219,16 @@ class LatexDocument(object):
         else:
             self.window.set_title(name)
     
-    def compile(self, callback=None, stop_on_error=True):
+    def compile_pages(self):
         for p,_ in self.pages:
             if p.modified_since_compile:
                 def pagecallback(status, page=p):  # Freeze p
                     if status == 0:
                         page.render_thumb()
                 p.compile(pagecallback, False)
+    
+    def compile(self, callback=None, stop_on_error=True):
+        self.compile_pages()
         if self.modified:
             self.save()
         self.do_latex(callback, stop_on_error)
@@ -220,10 +238,7 @@ class LatexDocument(object):
     
     def _do_latex(self, obj, command, callback, stop_on_error):
         # obj is either this LatexDocument or one of its LatexSlides
-        if obj.fullfilename.endswith('.tex'):
-            fn = obj.fullfilename[:-4]
-        else:
-            fn = obj.fullfilename
+        fn = base_filename(obj.fullfilename)
         
         def after_latex(status):
             if status == 0:
