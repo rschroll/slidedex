@@ -19,13 +19,13 @@ class LatexSlide(object):
     def __init__(self, parent, content="", render=False):
         self.parent = parent
         self.buffer = sourceview.Buffer(language=LATEXLANG)
-        self.set_content(content)
         self.buffer.connect("modified-changed", self.on_buffer_modified_changed)
         self.doc = None
         self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
         self._filename = None
         self._modified_since_save = False
         self._modified_since_compile = True
+        self.set_content(content)
         if render:
             self.compile(lambda status: not status and self.render_thumb(), False)
     
@@ -42,11 +42,14 @@ class LatexSlide(object):
         return os.path.join(self.parent.dir, self._filename)
     
     def set_content(self, content=""):
+        """Sets the content of the slide, without changing the modification status."""
+        self.buffer.handler_block_by_func(self.on_buffer_modified_changed)
         self.buffer.begin_not_undoable_action()
         self.buffer.set_text(content)
         self.buffer.end_not_undoable_action()
         self.buffer.set_modified(False)
         self.buffer.place_cursor(self.buffer.get_start_iter())
+        self.buffer.handler_unblock_by_func(self.on_buffer_modified_changed)
     
     def get_content(self):
         return self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter())
