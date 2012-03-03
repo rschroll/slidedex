@@ -170,6 +170,8 @@ class LatexDocument(object):
             self.pages.append((slide, slide.pb))
     
     def delete_page(self, iter):
+        slide, = self.pages.get(iter, 0)
+        slide.del_files()
         self.pages.remove(iter)
     
     def _save(self, fobj):
