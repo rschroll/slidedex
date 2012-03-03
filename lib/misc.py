@@ -7,7 +7,7 @@
 
 import gtk
 
-SEP = "\n%%SLIDEDEX%%\n"
+SEP = "%%SLIDEDEX%%"
 
 def render_to_pixbuf(page, msize):
     psize = page.get_size() # floats
@@ -16,3 +16,9 @@ def render_to_pixbuf(page, msize):
     pb = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, *size)
     page.render_to_pixbuf(0,0,size[0],size[1],scale,0,pb)
     return pb
+
+def base_filename(fn):
+    if fn.endswith('.tex'):
+        return fn[:-4]
+    else:
+        return fn

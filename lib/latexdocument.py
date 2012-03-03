@@ -13,7 +13,7 @@ import pango
 import poppler
 import gtkspell
 import gtksourceview2 as sourceview
-from misc import SEP, LIBPATH
+from misc import SEP, LIBPATH, base_filename
 from pdfviewer import PDFViewer
 from latexslide import LatexSlide, HeaderFooter
 from commandexecutor import CommandExecutor
@@ -22,13 +22,6 @@ from documentsettings import DocumentSettings
 
 class ObstinateUserError(Exception):
     pass
-
-
-def base_filename(fn):
-    if fn.endswith('.tex'):
-        return fn[:-4]
-    else:
-        return fn
 
 
 class EventDispatcher(object):
@@ -137,7 +130,7 @@ class LatexDocument(object):
     
     def _load(self, fobj):
         self._loaded = False
-        if not fobj.readline().startswith(SEP[1:-1]):  # Skip newlines
+        if not fobj.readline().startswith(SEP):
             raise IOError, "Not a SlideDeX file"
         str = fobj.read()
         segments = str.split(SEP)
@@ -145,10 +138,11 @@ class LatexDocument(object):
             raise IOError, "Could not load from file"
         self.settings = DocumentSettings(self, segments[0])
         self.pages.clear()
-        self.header.set_content(segments[1])
-        self.footer.set_content(segments[-1])
+        self.header.set_content(segments[1][1:])  # Ignore empty line for filename
+        self.footer.set_content(segments[-1][1:])
         for s in segments[2:-1]:
-            self.add_page(s)
+            filename, content = s.split('\n', 1)
+            self.add_page(content, filename)
         
         pdffn = base_filename(self.fullfilename) + '.pdf'
         select_first_page = lambda status: self.slidelist_view.select_path((0,))
@@ -160,8 +154,8 @@ class LatexDocument(object):
             self.compile(select_first_page)
         self._loaded = True
     
-    def add_page(self, content="", after=None, before=None, render=False):
-        slide = LatexSlide(self, content, render=(render and content))
+    def add_page(self, content="", filename="", after=None, before=None, render=False):
+        slide = LatexSlide(self, content, filename, render=(render and content))
         if after is not None:
             self.pages.insert_after(after, (slide, slide.pb))
         elif before is not None:
@@ -175,13 +169,12 @@ class LatexDocument(object):
         self.pages.remove(iter)
     
     def _save(self, fobj):
-        fobj.write(SEP[1:])  # Skip initial newline
+        fobj.write(SEP + '\n')
         fobj.write(self.settings.write())
-        fobj.write(SEP[1:])  # Skip initial newline
         fobj.write(self.header.get_content())
         for p in self.pages:
-            fobj.write(SEP + p[0].get_content())
-        fobj.write(SEP + self.footer.get_content())
+            fobj.write(p[0].get_content())
+        fobj.write(self.footer.get_content())
     
     def save(self):
         f = file(self.fullfilename, 'w')
@@ -380,8 +373,6 @@ class LatexDocument(object):
         return False
     
     def on_window_destroy(self, widget, data=None):
-        for p in self.pages:
-            p[0].del_files()
         gtk.main_quit()
     
     def on_quit(self, action):
@@ -524,7 +515,7 @@ class LatexDocument(object):
         # Note that this puts the slides in reverse order.
         for selection in self.slidelist_view.get_selected_items():
             slide, = self.pages.get(self.pages.get_iter(selection), 0)
-            data.append(slide.get_content())
+            data.append(slide.get_content(raw=True))
         selection_data.set(selection_data.target, 8, SEP.join(data))
     
     def drag_received_create(self, context, drop_info, selection_data, etime):

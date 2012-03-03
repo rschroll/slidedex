@@ -32,10 +32,11 @@ class DocumentSettings(object):
     def load(self, input_string):
         settings_string = StringIO()
         for line in input_string.split('\n'):
-            if line.startswith('% '):
-                settings_string.write(line[2:] + '\n')
-            else:
-                raise SettingsError, "Invalid line start"
+            if line:  # Ignore blank lines, like at end
+                if line.startswith('% '):
+                    settings_string.write(line[2:] + '\n')
+                else:
+                    raise SettingsError, "Invalid line start"
         settings_string.seek(0)
         self.parser.readfp(settings_string)
         glib.idle_add(self.parent.generate_skeleton_menu)

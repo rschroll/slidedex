@@ -10,23 +10,33 @@ import tempfile
 import glob
 import gtk
 import gtksourceview2 as sourceview
-from misc import SEP, render_to_pixbuf
+import poppler
+from misc import SEP, render_to_pixbuf, base_filename
 
 LATEXLANG = sourceview.language_manager_get_default().get_language('latex')
 
 class LatexSlide(object):
     
-    def __init__(self, parent, content="", render=False):
+    def __init__(self, parent, content="", filename="", render=False):
         self.parent = parent
         self.buffer = sourceview.Buffer(language=LATEXLANG)
         self.buffer.connect("modified-changed", self.on_buffer_modified_changed)
         self.doc = None
         self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
-        self._filename = None
+        self._filename = filename
         self._modified_since_save = False
         self._modified_since_compile = True
         self.set_content(content)
-        if render:
+        
+        cached = False
+        if self._filename:
+            pdffn = base_filename(self.fullfilename) + '.pdf'
+            if os.path.exists(self.fullfilename + '.tex') and os.path.exists(pdffn):
+                self.doc = poppler.document_new_from_file('file://' + os.path.abspath(pdffn), None)
+                self.render_thumb()
+                self._modified_since_compile = False
+                cached = True
+        if render and not cached:
             self.compile(lambda status: not status and self.render_thumb(), False)
     
     @property
@@ -51,8 +61,14 @@ class LatexSlide(object):
         self.buffer.place_cursor(self.buffer.get_start_iter())
         self.buffer.handler_unblock_by_func(self.on_buffer_modified_changed)
     
-    def get_content(self):
-        return self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter())
+    def get_content(self, raw=False):
+        text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter())
+        if not text.endswith('\n'):
+            text += '\n'
+        if raw:
+            return text
+        else:
+            return SEP + self._filename + '\n' + text
     
     def on_buffer_modified_changed(self, buffer):
         if buffer.get_modified():
@@ -82,8 +98,8 @@ class LatexSlide(object):
     
     def compile(self, callback=None, stop_on_error=True):
         f = file(self.fullfilename + '.tex', 'w')
-        f.write(self.parent.header.get_content() + SEP + self.get_content() +
-                SEP + self.parent.footer.get_content())
+        f.write(self.parent.header.get_content() + self.get_content() +
+                self.parent.footer.get_content())
         f.close()
         self.modified_since_compile = False
         self.do_latex(callback, stop_on_error)
