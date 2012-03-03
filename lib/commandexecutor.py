@@ -7,6 +7,8 @@
 
 import gtk
 import vte
+import os
+os.environ['openout_any'] = 'a'
 
 
 class CommandExecutor(object):

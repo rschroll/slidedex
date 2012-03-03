@@ -47,7 +47,7 @@ class LatexSlide(object):
             # created before you make it.  But we're not actually using this
             # file; we're using the filename as a base, so the additional
             # features of mkstemp don't help us avoid this problem.
-            filename = tempfile.mktemp(prefix='ztmp', dir=self.parent.dir)
+            filename = tempfile.mktemp(prefix='.tmp', dir=self.parent.dir)
             self._filename = os.path.basename(filename)
         return os.path.join(self.parent.dir, self._filename)
     
