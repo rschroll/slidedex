@@ -83,7 +83,7 @@ class CommandExecutor(object):
                 args:       Additional user arguments passed to the callback.
         """
         
-        self.add([self.NOOP], callback=(callback,) + args)
+        self.add([self.NOOP], stop_on_error=False, callback=(callback,) + args)
     
     def run(self):
         try:
