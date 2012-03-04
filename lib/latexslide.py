@@ -120,6 +120,11 @@ class LatexSlide(object):
         if self._filename:
             for f in glob.glob(self.fullfilename + '*'):
                 os.unlink(f)
+    
+    def del_files_mtime(self, mtime):
+        if self._filename:
+            if os.stat(self.fullfilename + '.tex').st_mtime > mtime:
+                self.del_files()
 
 class HeaderFooter(LatexSlide):
     

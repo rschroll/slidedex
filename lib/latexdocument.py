@@ -373,6 +373,10 @@ class LatexDocument(object):
         return False
     
     def on_window_destroy(self, widget, data=None):
+        # Delete temp files that (might) reflect unsaved changes
+        docmtime = os.stat(self.fullfilename).st_mtime
+        for p,_ in self.pages:
+            p.del_files_mtime(docmtime)
         gtk.main_quit()
     
     def on_quit(self, action):
