@@ -152,6 +152,7 @@ class LatexDocument(object):
             self.executor.add_callback(select_first_page)
         else:
             self.compile(select_first_page)
+        self.modified = False  # Set modified_since_save, and update the window title
         self._loaded = True
     
     def add_page(self, content="", filename="", after=None, before=None, render=False):

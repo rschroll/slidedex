@@ -24,7 +24,7 @@ class LatexSlide(object):
         self.doc = None
         self.pb = self.parent.window.render_icon(gtk.STOCK_MISSING_IMAGE, gtk.ICON_SIZE_DIALOG)
         self._filename = filename
-        self._modified_since_save = False
+        self._modified_since_save = True  # Set to False at end of document load.
         self._modified_since_compile = True
         self.set_content(content)
         
